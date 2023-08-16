@@ -1,0 +1,60 @@
+import cv2 as cv
+import numpy as np
+  
+# path 
+path = 'C:/Users/Rafa/python_img/opencv_image.jpg'
+ 
+# Reading an image in default mode 
+image = cv.imread(path) 
+img_org = image
+# Window name in which image is displayed 
+window_name = 'Image' 
+
+def empty (a):
+    pass
+
+cv.namedWindow("HSV Values")
+cv.resizeWindow("HSV Values", 400, 200)
+cv.createTrackbar("HUE Min", "HSV Values", 22, 45 , empty)
+cv.createTrackbar("HUE Max", "HSV Values", 45,45 , empty)
+cv.createTrackbar("SAT Min", "HSV Values", 100,255 , empty)
+cv.createTrackbar("SAT Max", "HSV Values", 255,255 , empty)
+
+
+# convert to hsv
+hsv = cv.cvtColor(image, cv.COLOR_BGR2HSV)
+h_min = cv.getTrackbarPos("HUE Min", "HSV Values")
+h_max = cv.getTrackbarPos("HUE Max", "HSV Values")
+s_min = cv.getTrackbarPos("SAT Min", "HSV Values")
+s_max = cv.getTrackbarPos("SAT Max", "HSV Values")
+
+
+# define color range
+yellow_lower = np.array([h_min, s_min, 0], np.uint8)
+yellow_upper = np.array([h_max, s_max, 255], np.uint8)
+# define mask
+mask = cv.inRange(hsv, yellow_lower, yellow_upper)
+
+
+
+cv.imshow(window_name + " mask", mask)
+
+# Creating kernel
+kernel = np.ones((3, 3), np.uint8)
+  
+# Using cv2.erode() method 
+image = cv.erode(image, kernel) 
+mask = cv.erode(mask, kernel)
+cv.imshow(window_name + " mask eroded", mask)
+# Displaying the image 
+cv.imshow(window_name + " org", img_org)
+
+cv.imshow(window_name + " eroded", image) 
+
+kernel_d = np.ones((5, 5), np.uint8)
+image_d = cv.dilate(image, kernel_d) 
+mask_d = cv.dilate(mask, kernel_d)
+cv.imshow(window_name + " mask dilated", mask_d)
+cv.imshow(window_name + " dilated", image_d) 
+
+cv.waitKey(0)
