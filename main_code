@@ -1,0 +1,108 @@
+import cv2 as cv
+import numpy as np
+import os
+from operator import itemgetter
+import math
+
+# read from webcam
+vid = cv.VideoCapture(0)
+
+def empty (a):
+    pass
+
+def ratio(cnt):
+   
+    rect = cv.minAreaRect(cnt)
+    box = cv.boxPoints(rect)
+    box = np.int0(box)
+    width = math.sqrt(pow(box[0][0]-box[1][0], 2) + pow(box[0][1]-box[1][1], 2))
+    height = math.sqrt(pow(box[0][0]-box[3][0], 2) + pow(box[0][1]-box[3][1], 2))
+    little, big =  sorted((width, height))
+    ratio = big/little
+    # check ratio
+    if 4 >= ratio > 2:
+        return True
+    else:
+        print('ERROR: Marker not detected')
+        return False
+
+
+cv.namedWindow("HSV Values")
+cv.resizeWindow("HSV Values", 400, 200)
+cv.createTrackbar("HUE Min", "HSV Values", 22, 45 , empty)
+cv.createTrackbar("HUE Max", "HSV Values", 45,45 , empty)
+cv.createTrackbar("SAT Min", "HSV Values", 100,255 , empty)
+cv.createTrackbar("SAT Max", "HSV Values", 255,255 , empty)
+
+while(True):
+
+    # capture each video frame
+    ret, frame = vid.read()
+
+    # convert to hsv
+    hsv = cv.cvtColor(frame, cv.COLOR_BGR2HSV)
+    h_min = cv.getTrackbarPos("HUE Min", "HSV Values")
+    h_max = cv.getTrackbarPos("HUE Max", "HSV Values")
+    s_min = cv.getTrackbarPos("SAT Min", "HSV Values")
+    s_max = cv.getTrackbarPos("SAT Max", "HSV Values")
+
+
+    # define color range
+    yellow_lower = np.array([h_min, s_min, 0], np.uint8)
+    yellow_upper = np.array([h_max, s_max, 255], np.uint8)
+    # define mask
+    mask = cv.inRange(hsv, yellow_lower, yellow_upper)
+
+    # Morphological Transform: Erosion, Dilation
+    kernel = np.ones((3, 3), "uint8")
+    mask = cv.erode(mask, kernel)
+
+    kernel = np.ones((5, 5), "uint8")
+    mask = cv.dilate(mask, kernel)
+
+    res_yellow = cv.bitwise_and(frame, frame, 
+                              mask = mask)
+    # Creating contour to track yellow color
+    contours, hierarchy = cv.findContours(mask,
+                                           cv.RETR_TREE,
+                                           cv.CHAIN_APPROX_SIMPLE)
+      
+    for contour in contours:
+        area = cv.contourArea(contour)
+        if(area > 500):
+             print(contour)
+             if ratio(contour):
+               
+                x, y, w, h = cv.boundingRect(contour)
+            
+                frame = cv.rectangle(frame, (x, y), 
+                                       (x + w, y + h), 
+                                       (0, 0, 255), 2)
+              
+                cv.putText(frame, "Yellow Color", (x, y),
+                        cv.FONT_HERSHEY_SIMPLEX, 1.0,
+                        (0, 0, 255)) 
+            
+    # original image with bounding box
+    cv.imshow("Color Detection in Real Time", frame)
+
+    # segmented image
+    cv.imshow("segmented image", mask)
+
+    k = cv.waitKey(1)
+    if k%256 == 32:
+        # SPACE pressed
+        path = 'C:/Users/Rafa/python_img'
+        cv.imwrite(os.path.join(path , 'opencv_image1.jpg'), frame)
+        
+    # the 'q' button is set as the
+    # quitting button you may use any
+    # desired button of your choice
+    if cv.waitKey(1) & 0xFF == ord('q'):
+        break
+
+
+# After the loop release the cap object
+vid.release()
+# Destroy all the windows
+cv.destroyAllWindows()
