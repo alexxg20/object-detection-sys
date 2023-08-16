@@ -1,0 +1,121 @@
+import cv2
+import datetime
+import numpy as np
+
+def detect_aruco(image):
+
+    print(" Detecting markers...")
+    a = datetime.datetime.now()
+    
+    arucoDict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
+    arucoParams =  cv2.aruco.DetectorParameters()
+    
+    arucoParams.adaptiveThreshWinSizeMin = 3 
+    arucoParams.adaptiveThreshWinSizeMax = 43 
+    arucoParams.adaptiveThreshWinSizeStep = 10 
+    arucoParams.adaptiveThreshConstant = 7 
+    arucoParams.minMarkerPerimeterRate = 0.03 
+    arucoParams.maxMarkerPerimeterRate = 4.0
+    arucoParams.polygonalApproxAccuracyRate = 0.03 
+    arucoParams.minCornerDistanceRate = 0.05 
+    arucoParams.minMarkerDistanceRate = 0.05 
+    arucoParams.minDistanceToBorder = 3 
+    arucoParams.cornerRefinementMethod = 0 
+    arucoParams.cornerRefinementWinSize = 5 
+    arucoParams.cornerRefinementMaxIterations = 30 
+    arucoParams.cornerRefinementMinAccuracy = 0.1 
+    arucoParams.markerBorderBits = 1 
+    arucoParams.perspectiveRemovePixelPerCell = 4 
+    arucoParams.perspectiveRemoveIgnoredMarginPerCell = 0.13 
+    arucoParams.maxErroneousBitsInBorderRate = 0.35 
+    arucoParams.minOtsuStdDev = 5.0 
+    arucoParams.errorCorrectionRate = 0.6 
+    
+    detector = cv2.aruco.ArucoDetector(arucoDict, arucoParams)
+    (corners, ids, rejected) = detector.detectMarkers(image)
+    
+    if len(corners) == 4:
+        # flatten the ArUco IDs list
+        ids = ids.flatten()
+        # loop over the detected ArUCo corners
+        for (markerCorner, markerID) in zip(corners, ids):
+            # extract the marker corners (which are always returned in
+            # top-left, top-right, bottom-right, and bottom-left order)
+            corners4 = markerCorner.reshape((4, 2))
+            (topLeft, topRight, bottomRight, bottomLeft) = corners4
+            # convert each of the (x, y)-coordinate pairs to integers
+            topRight = (int(topRight[0]), int(topRight[1]))
+            bottomRight = (int(bottomRight[0]), int(bottomRight[1]))
+            bottomLeft = (int(bottomLeft[0]), int(bottomLeft[1]))
+            topLeft = (int(topLeft[0]), int(topLeft[1]))      
+            
+    else:
+        print('\tNumber of markers ' + str(len(corners)) + '. Skipping image...')
+        return
+                
+    #Save sorted points
+    points = []
+    for i in range(4):
+        markerCorner = corners[list(ids).index(i)]
+        corners4 = markerCorner.reshape((4, 2))
+        points.append(corners4)
+    
+    b = datetime.datetime.now()
+    c = b - a
+    print(f" ... {c.microseconds/1000} ms")
+    
+    return points
+    
+
+def transform_image(points, image):
+    
+    print(" Applying transformation...")
+    a = datetime.datetime.now()
+    #points in sheet 
+    pts1 = np.float32([[50,50], [150,50], [50,150], [150,150], #topL, topR, bottomL, bottomR
+                      [1950,50], [2050,50], [1950,150], [2050,150], #Marker1
+                      [50,2815], [150,2815], [50,2915], [150,2915], #Marker2
+                      [1950,2815], [2050,2815], [1950,2915], [2050,2915]]) #Marker3
+    ptslist = []
+    for corners4 in points:
+        (topLeft, topRight, bottomRight, bottomLeft) = corners4
+        ptslist.append(topLeft)
+        ptslist.append(topRight)
+        ptslist.append(bottomLeft)
+        ptslist.append(bottomRight)
+        
+        topRight = (int(topRight[0]), int(topRight[1]))
+        bottomRight = (int(bottomRight[0]), int(bottomRight[1]))
+        bottomLeft = (int(bottomLeft[0]), int(bottomLeft[1]))
+        topLeft = (int(topLeft[0]), int(topLeft[1]))
+                    
+        
+    pts2 = np.array(ptslist, dtype=np.float32)
+    
+    pt1 = np.array([pts1[0], pts1[5], pts1[10], pts1[15]], dtype=np.float32)
+    pt2 = np.array([pts2[0], pts2[5], pts2[10], pts2[15]], dtype=np.float32)
+    pt2int = pt2.astype('int16')
+    pt1int = pt1.astype('int16')
+    
+    # Apply Perspective Transform Algorithm
+    matrix = cv2.getPerspectiveTransform(pt2, pt1)
+    result = cv2.warpPerspective(image, matrix, (2100, 2970))
+    
+    b = datetime.datetime.now()
+    c = b - a
+    print(f" ... {c.microseconds/1000} ms")
+    
+    return result
+
+def main(): 
+   
+    image = cv2.imread('C:/Users/Rafa/python_img/IMG-1935.jpg')
+    points = detect_aruco(image.copy())
+                   
+    if (points):
+       transformed = transform_image(points, image)
+       cv2.imwrite('C:/Users/Rafa/Output_img/IMG-1935_trans.png', transformed)
+    
+    
+if __name__ == '__main__':
+    main()
