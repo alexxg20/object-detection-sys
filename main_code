@@ -1,108 +1,125 @@
-import cv2 as cv
+import cv2
+import datetime
 import numpy as np
-import os
-from operator import itemgetter
 import math
 
-# read from webcam
-vid = cv.VideoCapture(0)
+def detect_aruco(image):
 
-def empty (a):
-    pass
-
-def ratio(cnt):
-   
-    rect = cv.minAreaRect(cnt)
-    box = cv.boxPoints(rect)
-    box = np.int0(box)
-    width = math.sqrt(pow(box[0][0]-box[1][0], 2) + pow(box[0][1]-box[1][1], 2))
-    height = math.sqrt(pow(box[0][0]-box[3][0], 2) + pow(box[0][1]-box[3][1], 2))
-    little, big =  sorted((width, height))
-    ratio = big/little
-    # check ratio
-    if 4 >= ratio > 2:
-        return True
+    print(" Detecting markers...")
+    a = datetime.datetime.now()
+    
+    arucoDict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
+    arucoParams =  cv2.aruco.DetectorParameters()
+    
+    arucoParams.adaptiveThreshWinSizeMin = 3 
+    arucoParams.adaptiveThreshWinSizeMax = 43 
+    arucoParams.adaptiveThreshWinSizeStep = 10 
+    arucoParams.adaptiveThreshConstant = 7 
+    arucoParams.minMarkerPerimeterRate = 0.03 
+    arucoParams.maxMarkerPerimeterRate = 4.0
+    arucoParams.polygonalApproxAccuracyRate = 0.03 
+    arucoParams.minCornerDistanceRate = 0.05 
+    arucoParams.minMarkerDistanceRate = 0.05 
+    arucoParams.minDistanceToBorder = 3 
+    arucoParams.cornerRefinementMethod = 0 
+    arucoParams.cornerRefinementWinSize = 5 
+    arucoParams.cornerRefinementMaxIterations = 30 
+    arucoParams.cornerRefinementMinAccuracy = 0.1 
+    arucoParams.markerBorderBits = 1 
+    arucoParams.perspectiveRemovePixelPerCell = 4 
+    arucoParams.perspectiveRemoveIgnoredMarginPerCell = 0.13 
+    arucoParams.maxErroneousBitsInBorderRate = 0.35 
+    arucoParams.minOtsuStdDev = 5.0 
+    arucoParams.errorCorrectionRate = 0.6 
+    
+    detector = cv2.aruco.ArucoDetector(arucoDict, arucoParams)
+    (corners, ids, rejected) = detector.detectMarkers(image)
+    
+    if len(corners) == 4:
+        # flatten the ArUco IDs list
+        ids = ids.flatten()
+        # loop over the detected ArUCo corners
+        for (markerCorner, markerID) in zip(corners, ids):
+            # extract the marker corners (which are always returned in
+            # top-left, top-right, bottom-right, and bottom-left order)
+            corners4 = markerCorner.reshape((4, 2))
+            (topLeft, topRight, bottomRight, bottomLeft) = corners4
+            # convert each of the (x, y)-coordinate pairs to integers
+            topRight = (int(topRight[0]), int(topRight[1]))
+            bottomRight = (int(bottomRight[0]), int(bottomRight[1]))
+            bottomLeft = (int(bottomLeft[0]), int(bottomLeft[1]))
+            topLeft = (int(topLeft[0]), int(topLeft[1]))      
+            
     else:
-        print('ERROR: Marker not detected')
-        return False
+        print('\tNumber of markers ' + str(len(corners)) + '. Skipping image...')
+        return
+                
+    #Save sorted points
+    points = []
+    for i in range(4):
+        markerCorner = corners[list(ids).index(i)]
+        corners4 = markerCorner.reshape((4, 2))
+        points.append(corners4)
+    
+    b = datetime.datetime.now()
+    c = b - a
+    print(f" ... {c.microseconds/1000} ms")
+    
+    return points
+    
 
+def transform_image(points, image):
+    
+    print(" Applying transformation...")
+    a = datetime.datetime.now()
+    #points in sheet 
+    pts1 = np.float32([[50,50], [150,50], [50,150], [150,150], #topL, topR, bottomL, bottomR
+                      [1950,50], [2050,50], [1950,150], [2050,150], #Marker1
+                      [50,2815], [150,2815], [50,2915], [150,2915], #Marker2
+                      [1950,2815], [2050,2815], [1950,2915], [2050,2915]]) #Marker3
 
-cv.namedWindow("HSV Values")
-cv.resizeWindow("HSV Values", 400, 200)
-cv.createTrackbar("HUE Min", "HSV Values", 22, 45 , empty)
-cv.createTrackbar("HUE Max", "HSV Values", 45,45 , empty)
-cv.createTrackbar("SAT Min", "HSV Values", 100,255 , empty)
-cv.createTrackbar("SAT Max", "HSV Values", 255,255 , empty)
-
-while(True):
-
-    # capture each video frame
-    ret, frame = vid.read()
-
-    # convert to hsv
-    hsv = cv.cvtColor(frame, cv.COLOR_BGR2HSV)
-    h_min = cv.getTrackbarPos("HUE Min", "HSV Values")
-    h_max = cv.getTrackbarPos("HUE Max", "HSV Values")
-    s_min = cv.getTrackbarPos("SAT Min", "HSV Values")
-    s_max = cv.getTrackbarPos("SAT Max", "HSV Values")
-
-
-    # define color range
-    yellow_lower = np.array([h_min, s_min, 0], np.uint8)
-    yellow_upper = np.array([h_max, s_max, 255], np.uint8)
-    # define mask
-    mask = cv.inRange(hsv, yellow_lower, yellow_upper)
-
-    # Morphological Transform: Erosion, Dilation
-    kernel = np.ones((3, 3), "uint8")
-    mask = cv.erode(mask, kernel)
-
-    kernel = np.ones((5, 5), "uint8")
-    mask = cv.dilate(mask, kernel)
-
-    res_yellow = cv.bitwise_and(frame, frame, 
-                              mask = mask)
-    # Creating contour to track yellow color
-    contours, hierarchy = cv.findContours(mask,
-                                           cv.RETR_TREE,
-                                           cv.CHAIN_APPROX_SIMPLE)
-      
-    for contour in contours:
-        area = cv.contourArea(contour)
-        if(area > 500):
-             print(contour)
-             if ratio(contour):
-               
-                x, y, w, h = cv.boundingRect(contour)
-            
-                frame = cv.rectangle(frame, (x, y), 
-                                       (x + w, y + h), 
-                                       (0, 0, 255), 2)
-              
-                cv.putText(frame, "Yellow Color", (x, y),
-                        cv.FONT_HERSHEY_SIMPLEX, 1.0,
-                        (0, 0, 255)) 
-            
-    # original image with bounding box
-    cv.imshow("Color Detection in Real Time", frame)
-
-    # segmented image
-    cv.imshow("segmented image", mask)
-
-    k = cv.waitKey(1)
-    if k%256 == 32:
-        # SPACE pressed
-        path = 'C:/Users/Rafa/python_img'
-        cv.imwrite(os.path.join(path , 'opencv_image1.jpg'), frame)
+    ptslist = []
+    for corners4 in points:
+        (topLeft, topRight, bottomRight, bottomLeft) = corners4
+        ptslist.append(topLeft)
+        ptslist.append(topRight)
+        ptslist.append(bottomLeft)
+        ptslist.append(bottomRight)
         
-    # the 'q' button is set as the
-    # quitting button you may use any
-    # desired button of your choice
-    if cv.waitKey(1) & 0xFF == ord('q'):
-        break
+        topRight = (int(topRight[0]), int(topRight[1]))
+        bottomRight = (int(bottomRight[0]), int(bottomRight[1]))
+        bottomLeft = (int(bottomLeft[0]), int(bottomLeft[1]))
+        topLeft = (int(topLeft[0]), int(topLeft[1]))
+                    
+        
+    pts2 = np.array(ptslist, dtype=np.float32)
+    
+    pt1 = np.array([pts1[0], pts1[5], pts1[10], pts1[15]], dtype=np.float32)
+    pt2 = np.array([pts2[0], pts2[5], pts2[10], pts2[15]], dtype=np.float32)
+   
+    
+    # Apply Perspective Transform Algorithm
+    theta = math.radians(90)
+    rotate_90 = np.array([math.cos(theta), -(math.sin(theta))])
+    matrix = cv2.getPerspectiveTransform(pt2, pt1)
+    matrix_tmp = np.matmul()
+    result = cv2.warpPerspective(image, matrix, (2970, 2100))
+    
+    b = datetime.datetime.now()
+    c = b - a
+    print(f" ... {c.microseconds/1000} ms")
+    
+    return result
 
-
-# After the loop release the cap object
-vid.release()
-# Destroy all the windows
-cv.destroyAllWindows()
+def main(): 
+    image = cv2.imread('C:/Users/Rafa/python_img/IMG-1935.jpg')
+    
+    points = detect_aruco(image.copy())
+                   
+    if (points):
+       transformed = transform_image(points, image)
+       cv2.imwrite('C:/Users/Rafa/Output_img/IMG-1935_trans.png', transformed)
+    
+    
+if __name__ == '__main__':
+    main()
